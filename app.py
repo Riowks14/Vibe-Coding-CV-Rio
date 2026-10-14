@@ -1,17 +1,10 @@
 from base64 import b64encode
-import hashlib
-import hmac
 from io import BytesIO
-import os
-import secrets
-import uuid
 import warnings
 import webbrowser
 
 from flask import Flask, jsonify, render_template_string, request
 from PIL import Image, ImageOps, UnidentifiedImageError
-import psycopg
-from psycopg.types.json import Jsonb
 from werkzeug.exceptions import RequestEntityTooLarge
 
 MAX_PHOTO_BYTES = 2 * 1024 * 1024
@@ -62,8 +55,7 @@ HTML_PAGE = r"""<!doctype html>
   <header class="topbar">
     <div class="brand">Build<b>CV</b></div>
     <div class="actions">
-      <button class="button primary" id="save-cv">Simpan &amp; buat link</button>
-      <button class="button hidden" id="edit-cv">Edit CV</button>
+      <button class="button primary" id="save-cv">Simpan CV</button>
       <button class="button" id="change-design">Ubah desain</button>
       <button class="button primary" id="download-pdf">Unduh PDF</button>
     </div>
@@ -106,34 +98,8 @@ HTML_PAGE = r"""<!doctype html>
     </section>
   </main>
 
-  <dialog id="share-dialog">
-    <form method="dialog">
-      <h2>CV berhasil disimpan</h2>
-      <p>Simpan link publik dan kode edit ini secara terpisah. Siapa pun yang memiliki kode dapat mengubah CV.</p>
-      <label for="share-url">Link untuk melihat CV</label>
-      <input id="share-url" readonly>
-      <label for="share-edit-code">Kode rahasia untuk mengedit</label>
-      <input id="share-edit-code" readonly>
-      <button class="button primary">Selesai</button>
-    </form>
-  </dialog>
-  <dialog id="edit-dialog">
-    <form id="edit-form">
-      <h2>Edit CV</h2>
-      <p>Masukkan kode rahasia pemilik untuk mengubah CV ini.</p>
-      <label for="edit-code">Kode edit</label>
-      <input id="edit-code" type="password" autocomplete="current-password" required>
-      <p id="edit-error" role="alert"></p>
-      <div class="actions">
-        <button class="button" type="button" id="cancel-edit">Batal</button>
-        <button class="button primary" type="submit">Buka akses edit</button>
-      </div>
-    </form>
-  </dialog>
-
   <script>
     const STORAGE_KEY = 'buildcv-state-v1';
-    const INITIAL_CV_ID = {{ cv_id|tojson }};
     const defaultState = {
       purpose: 'job',
       template: 'classic',
@@ -169,13 +135,6 @@ HTML_PAGE = r"""<!doctype html>
     ];
     let category = 'all';
     let state = loadState();
-    let activeCvId = INITIAL_CV_ID;
-    let editKey = null;
-    let canEdit = !activeCvId;
-
-    function editKeyStorageKey(cvId) {
-      return `buildcv-edit-key-${cvId}`;
-    }
 
     function loadState() {
       try {
@@ -393,15 +352,8 @@ HTML_PAGE = r"""<!doctype html>
           window.print();
         }
         if (event.target.id === 'save-cv') {
-          saveCurrentCV();
-        }
-        if (event.target.id === 'edit-cv') {
-          document.getElementById('edit-error').textContent = '';
-          document.getElementById('edit-code').value = '';
-          document.getElementById('edit-dialog').showModal();
-        }
-        if (event.target.id === 'cancel-edit') {
-          document.getElementById('edit-dialog').close();
+          save();
+          alert('CV tersimpan di browser ini.');
         }
       });
 
@@ -410,25 +362,6 @@ HTML_PAGE = r"""<!doctype html>
           state.purpose = event.target.value;
           save();
           renderPreview();
-        }
-      });
-
-      document.getElementById('edit-form').addEventListener('submit', async (event) => {
-        event.preventDefault();
-        const key = document.getElementById('edit-code').value;
-        try {
-          await apiRequest(`/api/cvs/${activeCvId}/authorize`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ edit_key: key })
-          });
-          editKey = key;
-          canEdit = true;
-          localStorage.setItem(editKeyStorageKey(activeCvId), key);
-          setAccessMode();
-          document.getElementById('edit-dialog').close();
-        } catch (error) {
-          document.getElementById('edit-error').textContent = error.message;
         }
       });
 
@@ -441,108 +374,15 @@ HTML_PAGE = r"""<!doctype html>
       });
     }
 
-    async function apiRequest(url, options = {}) {
-      const response = await fetch(url, options);
-      const result = await response.json();
-      if (!response.ok) {
-        const error = new Error(result.error || 'Permintaan gagal. Coba lagi.');
-        error.status = response.status;
-        throw error;
-      }
-      return result;
-    }
-
-    function setAccessMode() {
-      const inputPanel = document.getElementById('input-panel');
-      inputPanel.classList.toggle('hidden', !canEdit);
-      document.getElementById('builder').classList.toggle('readonly', !canEdit);
-      document.getElementById('save-cv').classList.toggle('hidden', !canEdit);
-      document.getElementById('save-cv').textContent = activeCvId ? 'Simpan perubahan' : 'Simpan & buat link';
-      document.getElementById('edit-cv').classList.toggle('hidden', canEdit || !activeCvId);
-      document.getElementById('change-design').classList.toggle('hidden', !canEdit);
-    }
-
-    async function saveCurrentCV() {
-      const button = document.getElementById('save-cv');
-      button.disabled = true;
-      try {
-        if (!activeCvId) {
-          const result = await apiRequest('/api/cvs', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ state })
-          });
-          activeCvId = result.id;
-          editKey = result.edit_key;
-          let storageWarning = '';
-          try {
-            localStorage.setItem(editKeyStorageKey(activeCvId), editKey);
-          } catch {
-            storageWarning = 'Browser tidak dapat mengingat kode edit. Simpan kode yang ditampilkan agar CV tetap bisa diedit setelah halaman ditutup.';
-          }
-          history.replaceState(null, '', `/cv/${activeCvId}`);
-          document.getElementById('share-url').value = `${location.origin}/cv/${activeCvId}`;
-          document.getElementById('share-edit-code').value = editKey;
-          document.getElementById('share-dialog').showModal();
-          setAccessMode();
-          if (storageWarning) alert(storageWarning);
-        } else {
-          await apiRequest(`/api/cvs/${activeCvId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json', 'X-Edit-Key': editKey },
-            body: JSON.stringify({ state })
-          });
-          alert('Perubahan CV berhasil disimpan.');
-        }
-      } catch (error) {
-        alert(error.message);
-      } finally {
-        button.disabled = false;
-      }
-    }
-
-    async function init() {
+    function init() {
       renderPurposes();
       renderTemplates();
       bindEvents();
       document.getElementById('builder').classList.remove('hidden');
       document.getElementById('template-grid').classList.add('hidden');
       document.querySelector('.toolbar').classList.add('hidden');
-      document.querySelector('.steps').id = 'steps';
-      document.getElementById('steps').classList.add('hidden');
-      setAccessMode();
-
-      if (activeCvId) {
-        try {
-          const result = await apiRequest(`/api/cvs/${activeCvId}`);
-          state = result.state;
-          const savedKey = localStorage.getItem(editKeyStorageKey(activeCvId));
-          if (savedKey) {
-            try {
-              await apiRequest(`/api/cvs/${activeCvId}/authorize`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ edit_key: savedKey })
-              });
-              editKey = savedKey;
-              canEdit = true;
-            } catch (error) {
-              if (error.status === 403) {
-                localStorage.removeItem(editKeyStorageKey(activeCvId));
-              } else {
-                alert(error.message);
-              }
-            }
-          }
-        } catch (error) {
-          document.getElementById('resume').textContent = error.message;
-          return;
-        }
-      }
-
       renderForm();
       renderPreview();
-      setAccessMode();
     }
 
     init();
@@ -560,130 +400,7 @@ def handle_oversized_request(_error):
 @app.get("/")
 @app.get("/index.html")
 def index():
-    return render_template_string(HTML_PAGE, cv_id=None)
-
-
-def database_connection():
-    database_url = os.environ.get("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL belum dikonfigurasi.")
-    if database_url.startswith("postgres://"):
-        database_url = "postgresql://" + database_url.removeprefix("postgres://")
-    return psycopg.connect(database_url)
-
-
-def ensure_cv_table(connection):
-    connection.execute(
-        """
-        CREATE TABLE IF NOT EXISTS cvs (
-            id UUID PRIMARY KEY,
-            state JSONB NOT NULL,
-            edit_key_hash TEXT NOT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-        """
-    )
-
-
-def valid_edit_key(connection, cv_id, edit_key):
-    if not isinstance(edit_key, str) or not edit_key:
-        return False
-    row = connection.execute(
-        "SELECT edit_key_hash FROM cvs WHERE id = %s",
-        (cv_id,),
-    ).fetchone()
-    if row is None:
-        return False
-    provided_hash = hashlib.sha256(edit_key.encode("utf-8")).hexdigest()
-    return hmac.compare_digest(row[0], provided_hash)
-
-
-@app.get("/cv/<uuid:cv_id>")
-def view_cv(cv_id):
-    return render_template_string(HTML_PAGE, cv_id=str(cv_id))
-
-
-@app.post("/api/cvs")
-def create_cv():
-    payload = request.get_json(silent=True)
-    state = payload.get("state") if isinstance(payload, dict) else None
-    if not isinstance(state, dict):
-        return jsonify(error="Data CV tidak valid."), 400
-
-    cv_id = uuid.uuid4()
-    edit_key = secrets.token_urlsafe(32)
-    edit_key_hash = hashlib.sha256(edit_key.encode("utf-8")).hexdigest()
-    try:
-        with database_connection() as connection:
-            ensure_cv_table(connection)
-            connection.execute(
-                "INSERT INTO cvs (id, state, edit_key_hash) VALUES (%s, %s, %s)",
-                (cv_id, Jsonb(state), edit_key_hash),
-            )
-    except (psycopg.Error, RuntimeError):
-        app.logger.exception("Gagal membuat CV di database.")
-        return jsonify(error="Database tidak tersedia. Coba lagi nanti."), 503
-
-    return jsonify(id=str(cv_id), edit_key=edit_key), 201
-
-
-@app.get("/api/cvs/<uuid:cv_id>")
-def get_cv(cv_id):
-    try:
-        with database_connection() as connection:
-            ensure_cv_table(connection)
-            row = connection.execute(
-                "SELECT state FROM cvs WHERE id = %s",
-                (cv_id,),
-            ).fetchone()
-    except (psycopg.Error, RuntimeError):
-        app.logger.exception("Gagal membaca CV dari database.")
-        return jsonify(error="Database tidak tersedia. Coba lagi nanti."), 503
-
-    if row is None:
-        return jsonify(error="CV tidak ditemukan."), 404
-    return jsonify(state=row[0])
-
-
-@app.post("/api/cvs/<uuid:cv_id>/authorize")
-def authorize_cv_edit(cv_id):
-    payload = request.get_json(silent=True)
-    edit_key = payload.get("edit_key") if isinstance(payload, dict) else None
-    try:
-        with database_connection() as connection:
-            ensure_cv_table(connection)
-            authorized = valid_edit_key(connection, cv_id, edit_key)
-    except (psycopg.Error, RuntimeError):
-        app.logger.exception("Gagal memverifikasi akses edit CV.")
-        return jsonify(error="Database tidak tersedia. Coba lagi nanti."), 503
-
-    if not authorized:
-        return jsonify(error="Kode edit salah atau CV tidak ditemukan."), 403
-    return jsonify(authorized=True)
-
-
-@app.put("/api/cvs/<uuid:cv_id>")
-def update_cv(cv_id):
-    payload = request.get_json(silent=True)
-    state = payload.get("state") if isinstance(payload, dict) else None
-    if not isinstance(state, dict):
-        return jsonify(error="Data CV tidak valid."), 400
-
-    edit_key = request.headers.get("X-Edit-Key", "")
-    try:
-        with database_connection() as connection:
-            ensure_cv_table(connection)
-            if not valid_edit_key(connection, cv_id, edit_key):
-                return jsonify(error="Kode edit salah atau CV tidak ditemukan."), 403
-            connection.execute(
-                "UPDATE cvs SET state = %s, updated_at = NOW() WHERE id = %s",
-                (Jsonb(state), cv_id),
-            )
-    except (psycopg.Error, RuntimeError):
-        app.logger.exception("Gagal menyimpan perubahan CV.")
-        return jsonify(error="Database tidak tersedia. Coba lagi nanti."), 503
-    return jsonify(saved=True)
+    return render_template_string(HTML_PAGE)
 
 
 @app.post("/api/profile-photo")
