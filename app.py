@@ -38,6 +38,13 @@ HTML_PAGE = r"""<!doctype html>
     .builder{display:grid;grid-template-columns:minmax(280px,.8fr) minmax(440px,1.2fr);gap:20px;align-items:start}.panel{background:#fff;border:1px solid #e6e8f0;border-radius:16px;padding:20px}.panel h2{font-size:18px;margin:0 0 5px}.panel-sub{font-size:12px;color:#7a8291;margin:0 0 18px}.field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:flex;flex-direction:column;gap:6px}.field.full{grid-column:1/-1}.field label{font-size:12px;font-weight:700;color:#454e62}.field input,.field textarea{border:1px solid #e0e3ec;border-radius:8px;padding:10px 11px;outline:none;width:100%;background:#fff}.field textarea{resize:vertical;min-height:84px}.field input:focus,.field textarea:focus{border-color:#8176e9;box-shadow:0 0 0 3px rgba(117,103,232,0.14)}
     .section-head{display:flex;align-items:center;justify-content:space-between;margin:22px 0 10px}.section-head h3{font-size:14px;margin:0}.entry{border:1px solid #edf0f5;border-radius:10px;padding:12px;margin:9px 0}.entry-remove{border:0;background:none;color:#9b5260;font-size:12px;padding:4px}.add-button{border:1px dashed #c9cde0;background:#fafaff;color:#554aca;border-radius:8px;padding:9px 12px;font-weight:700;font-size:12px;width:100%}
     .preview-panel{position:sticky;top:88px}.preview-tools{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}.paper-wrap{background:#eef0f5;padding:20px;border-radius:12px;max-height:calc(100vh - 200px);overflow:auto}.resume{width:100%;max-width:595px;min-height:842px;margin:0 auto;background:#fff;color:#1d2638;box-shadow:0 5px 24px rgba(27,36,64,0.12);padding:42px 45px;font-family:Arial,sans-serif;font-size:11px;line-height:1.48;overflow-wrap:anywhere}.resume h1{font-size:27px;letter-spacing:-0.7px;margin:0 0 4px;color:#202a40}.resume .contact{font-size:9px;color:#637087;margin:0 0 18px}.resume .contact-list{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}.resume .contact-item{display:inline-flex;align-items:center;white-space:nowrap}.resume .contact-item + .contact-item::before{content:"|";margin-right:8px;color:#8a93a7}.resume h2{font-size:11px;text-transform:uppercase;letter-spacing:1.1px;color:#394768;margin:17px 0 7px;border-bottom:1px solid #dce1eb;padding-bottom:4px}.resume p{margin:4px 0}.resume .resume-entry{margin:8px 0}.resume .resume-entry strong{font-size:11px}.resume .muted{color:#697487}.resume .resume-head{margin-bottom:12px}.resume .resume-columns{display:grid;grid-template-columns:1fr 1fr;gap:21px}
+    .resume .resume-head-content{min-width:0}.resume .resume-photo{width:84px;height:84px;object-fit:cover;border-radius:50%;float:right;margin:0 0 10px 14px}
+    .resume.template-ats .resume-columns{display:block}.resume.template-ats h2{color:#202a40;border-bottom-color:#202a40}
+    .resume.template-editorial{font-family:Georgia,serif;border-top:8px solid #b68b4c}.resume.template-editorial h1{font-family:Georgia,serif;font-weight:500}.resume.template-editorial h2{color:#8a642f;border-bottom-color:#d9c5a4}
+    .resume.template-profile .resume-head{display:flex;align-items:center;gap:18px;padding:18px;background:#34415e;color:#fff;margin:-12px -12px 18px}.resume.template-profile .resume-head h1{color:#fff}.resume.template-profile .resume-head .muted{color:#e0e5ef}.resume.template-profile .resume-photo{float:none;flex:none;width:88px;height:88px;margin:0}
+    .resume.template-timeline .resume-entry{border-left:2px solid #7664e8;padding:0 0 8px 11px;margin-left:4px}.resume.template-timeline h2{color:#584cca}
+    .resume.template-portfolio .resume-head{background:#edf5ff;border-left:5px solid #3574bc;padding:14px 16px}.resume.template-portfolio h2{color:#2865a5;border-bottom-color:#bdd4ed}.resume.template-portfolio .resume-photo{border-radius:12px}
+    .photo-status{font-size:12px;color:#6c7486;margin:0}.photo-status.error{color:#a53b4a}
     .builder.readonly{grid-template-columns:1fr}.builder.readonly .preview-panel{position:static}
     .purpose-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:14px 16px;background:#fff;border:1px solid #e8eaf1;border-radius:14px;margin:0 0 20px}
     .purpose-row label{font-size:13px;font-weight:700}.purpose-row select{border:1px solid #dfe2eb;background:#fff;border-radius:8px;padding:9px 32px 9px 11px;color:#273149}
@@ -109,6 +116,7 @@ HTML_PAGE = r"""<!doctype html>
       phone: '+62 812 3456 7890',
       location: 'Jakarta, Indonesia',
       website: 'www.rio.dev',
+      profilePhoto: '',
       summary: 'Saya adalah developer yang fokus pada product engineering, pengembangan aplikasi web, dan pengalaman pengguna yang rapi dan efisien.',
       skills: ['HTML', 'CSS', 'JavaScript', 'React', 'Node.js', 'Python', 'UI/UX'],
       experience: [
@@ -219,6 +227,7 @@ HTML_PAGE = r"""<!doctype html>
           <div class="field"><label>Lokasi</label><input id="location" value="${escapeHtml(state.location)}"></div>
           <div class="field"><label>Website</label><input id="website" value="${escapeHtml(state.website)}"></div>
           <div class="field full"><label>Ringkasan profil</label><textarea id="summary">${escapeHtml(state.summary)}</textarea></div>
+          <div class="field full"><label for="profile-photo">Foto profil (JPG/PNG, maks. 2 MB)</label><input id="profile-photo" type="file" accept="image/jpeg,image/png"><p class="photo-status" id="photo-status" aria-live="polite">${state.profilePhoto ? 'Foto profil sudah ditambahkan.' : 'Foto akan ditampilkan pada CV.'}</p>${state.profilePhoto ? '<button class="entry-remove" type="button" data-remove-photo>Hapus foto</button>' : ''}</div>
           <div class="field full"><label>Keahlian</label><input id="skills" value="${escapeHtml((state.skills || []).join(', '))}"></div>
           <div class="field full"><label>LinkedIn</label><input id="linkedin" value="${escapeHtml(state.social?.linkedin || '')}"></div>
           <div class="field full"><label>GitHub</label><input id="github" value="${escapeHtml(state.social?.github || '')}"></div>
@@ -239,11 +248,15 @@ HTML_PAGE = r"""<!doctype html>
       const experience = (state.experience || []).map(exp => `<div class="resume-entry"><strong>${escapeHtml(exp.role || '')}</strong><div>${escapeHtml(exp.company || '')} &middot; ${escapeHtml(exp.period || '')}</div><div class="muted">${escapeHtml(exp.description || '')}</div></div>`).join('');
       const education = (state.education || []).map(edu => `<div class="resume-entry"><strong>${escapeHtml(edu.degree || '')}</strong><div>${escapeHtml(edu.school || '')} &middot; ${escapeHtml(edu.period || '')}</div></div>`).join('');
       const projects = (state.projects || []).map(proj => `<div class="resume-entry"><strong>${escapeHtml(proj.name || '')}</strong><div class="muted">${escapeHtml(proj.description || '')}</div></div>`).join('');
+      const template = templates.some(item => item.id === state.template) ? state.template : 'classic';
 
       resume.innerHTML = `
         <div class="resume-head">
-          <h1>${escapeHtml(state.name || 'Nama Anda')}</h1>
-          <div class="muted">${escapeHtml(state.title || 'Judul profesional')}</div>
+          ${state.profilePhoto ? `<img class="resume-photo" src="${escapeHtml(state.profilePhoto)}" alt="Foto profil">` : ''}
+          <div class="resume-head-content">
+            <h1>${escapeHtml(state.name || 'Nama Anda')}</h1>
+            <div class="muted">${escapeHtml(state.title || 'Judul profesional')}</div>
+          </div>
         </div>
         <div class="contact">
           <div class="contact-list">
@@ -272,6 +285,7 @@ HTML_PAGE = r"""<!doctype html>
           </div>
         </div>
       `;
+      resume.className = `resume template-${template}`;
       document.getElementById('preview-name').textContent = (state.name || 'CV Anda') + ' - ' + (purposes[state.purpose]?.label || 'Tujuan');
       document.getElementById('preview-purpose').textContent = purposes[state.purpose]?.label || 'Tujuan';
     }
@@ -348,6 +362,13 @@ HTML_PAGE = r"""<!doctype html>
           renderTemplates();
           return;
         }
+        if (event.target.closest('[data-remove-photo]')) {
+          state.profilePhoto = '';
+          save();
+          renderForm();
+          renderPreview();
+          return;
+        }
         if (event.target.id === 'download-pdf') {
           window.print();
         }
@@ -362,6 +383,29 @@ HTML_PAGE = r"""<!doctype html>
           state.purpose = event.target.value;
           save();
           renderPreview();
+        }
+      });
+
+      document.addEventListener('change', async (event) => {
+        const input = event.target;
+        if (input.id !== 'profile-photo' || !input.files?.[0]) return;
+        const status = document.getElementById('photo-status');
+        status.classList.remove('error');
+        status.textContent = 'Foto sedang diproses...';
+        const formData = new FormData();
+        formData.append('photo', input.files[0]);
+        try {
+          const response = await fetch('/api/profile-photo', { method: 'POST', body: formData });
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Foto gagal diproses.');
+          state.profilePhoto = result.photo;
+          save();
+          renderForm();
+          renderPreview();
+        } catch (error) {
+          status.classList.add('error');
+          status.textContent = error instanceof Error ? error.message : 'Foto gagal diproses.';
+          input.value = '';
         }
       });
 
